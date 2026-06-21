@@ -1,0 +1,280 @@
+<template>
+  <div class="page-container">
+    <div class="header">
+      <div class="back-btn" onclick="goBack">
+        <text class="back-text">← 返回</text>
+      </div>
+      <text class="title">传感器实时监控</text>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="controls">
+      <div class="btn {{sensorActive ? 'btn-danger' : 'btn-primary'}}" onclick="toggleSensor">
+        <text class="btn-text">{{sensorActive ? '停止监听' : '开始监听'}}</text>
+      </div>
+      <div class="btn btn-secondary" onclick="clearLogs">
+        <text class="btn-text">清空日志</text>
+      </div>
+    </div>
+
+    <!-- 日志轮播区域 -->
+    <div class="log-carousel-wrapper">
+      <div class="log-carousel">
+        <text class="log-item" for="{{displayLogs}}">{{$item}}</text>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import sensor from '@system.sensor'
+import router from '@system.router'
+import brightness from '@system.brightness'
+import SensorFilter from '../../common/sensorFilter.js'
+import { calculateMagnitude } from '../../common/utils.js'
+
+export default {
+  data: {
+    sensorActive: false,
+    displayLogs: [],
+    maxLogs: 50,  // 最多显示50条
+    filter: null
+  },
+
+  onInit() {
+    console.log('传感器监控工具初始化')
+    this.filter = new SensorFilter(0.2, 0.9)
+    this.addLog('页面已初始化')
+    this.addLog('滤波器已启用 (低通=0.2, 高通=0.9)')
+    this.addLog('点击"开始监听"订阅传感器...')
+  },
+
+  onDestroy() {
+    if (this.sensorActive) {
+      this.stopSensors()
+    }
+    // 恢复屏幕正常息屏
+    this.setScreenKeepOn(false)
+  },
+
+  goBack() {
+    router.back()
+  },
+
+  toggleSensor() {
+    if (this.sensorActive) {
+      this.stopSensors()
+    } else {
+      this.startSensors()
+    }
+  },
+
+  startSensors() {
+    this.sensorActive = true
+    this.addLog('========== 开始监听 ==========')
+    console.log('开始订阅传感器')
+
+    // 保持屏幕常亮
+    this.setScreenKeepOn(true)
+
+    // 订阅加速度传感器
+    try {
+      sensor.subscribeAccelerometer({
+        interval: 'game',
+        callback: (ret) => {
+          console.log('收到加速度数据:', ret)
+          const x = ret.x || 0
+          const y = ret.y || 0
+          const z = ret.z || 0
+
+          // 使用滤波器处理数据
+          const filtered = this.filter.process(x, y, z)
+          const magnitude = calculateMagnitude(filtered.x, filtered.y, filtered.z)
+
+          // this.addLog('[原始] x=' + x.toFixed(2) + ', y=' + y.toFixed(2) + ', z=' + z.toFixed(2))
+          this.addLog('[过滤] x=' + filtered.x.toFixed(2) + ', y=' + filtered.y.toFixed(2) + ', z=' + filtered.z.toFixed(2) + ', mag=' + magnitude.toFixed(2) + 'g')
+        },
+        fail: (msg, code) => {
+          console.log('加速度订阅失败:', msg, code)
+          this.addLog('[加速度] 订阅失败: ' + code)
+        }
+      })
+      this.addLog('[加速度] 订阅请求已发送')
+      console.log('加速度订阅请求已发送')
+    } catch (e) {
+      console.log('加速度异常:', e)
+      this.addLog('[加速度] 异常: ' + e.message)
+    }
+
+    // 订阅气压传感器
+    try {
+      sensor.subscribePressure({
+        callback: (ret) => {
+          console.log('收到气压数据:', ret)
+          const pressure = ret.pressure || 0
+          this.addLog('[气压] pressure=' + pressure.toFixed(2) + ' hPa')
+        },
+        fail: (msg, code) => {
+          console.log('气压订阅失败:', msg, code)
+          this.addLog('[气压] 订阅失败: ' + code)
+        }
+      })
+      this.addLog('[气压] 订阅请求已发送')
+      console.log('气压订阅请求已发送')
+    } catch (e) {
+      console.log('气压异常:', e)
+      this.addLog('[气压] 异常: ' + e.message)
+    }
+  },
+
+  stopSensors() {
+    this.sensorActive = false
+
+    try {
+      sensor.unsubscribeAccelerometer()
+      this.addLog('[加速度] 已停止')
+    } catch (e) {
+      console.log('unsubscribe accelerometer error:', e)
+    }
+
+    try {
+      sensor.unsubscribePressure()
+      this.addLog('[气压] 已停止')
+    } catch (e) {
+      console.log('unsubscribe pressure error:', e)
+    }
+
+    // 恢复屏幕正常息屏
+    this.setScreenKeepOn(false)
+
+    this.addLog('========== 停止监听 ==========')
+  },
+
+  clearLogs() {
+    this.displayLogs = []
+    this.filter.reset()
+    this.addLog('日志已清空')
+    this.addLog('滤波器已重置')
+  },
+
+  addLog(message) {
+    // 添加到数组头部
+    const newLogs = [message]
+    for (let i = 0; i < this.displayLogs.length && i < this.maxLogs - 1; i++) {
+      newLogs.push(this.displayLogs[i])
+    }
+
+    this.displayLogs = newLogs
+    console.log(message)
+  },
+
+  /**
+   * 设置屏幕常亮状态
+   * @param {boolean} keepOn - true为保持常亮，false为恢复正常
+   */
+  setScreenKeepOn(keepOn) {
+    try {
+      brightness.setKeepScreenOn({
+        keepScreenOn: keepOn,
+        success: () => {
+          console.log('屏幕常亮设置成功:', keepOn)
+        },
+        fail: (data, code) => {
+          console.error('屏幕常亮设置失败:', code, data)
+        }
+      })
+    } catch (e) {
+      console.error('屏幕常亮API调用异常:', e)
+    }
+  }
+}
+</script>
+
+<style>
+.page-container {
+  flex-direction: column;
+  padding: 15px;
+  background-color: #000000;
+  width: 100%;
+  height: 100%;
+}
+
+.header {
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.back-btn {
+  align-self: flex-start;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.back-text {
+  font-size: 14px;
+  color: #09ba07;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+/* 日志轮播区域 */
+.log-carousel-wrapper {
+  flex: 1;
+  background-color: #0a0a0a;
+  border: 1px solid #333333;
+  border-radius: 8px;
+}
+
+.log-carousel {
+  flex-direction: column;
+  padding: 10px;
+  height: 100%;
+  overflow: scroll;
+}
+
+.log-item {
+  font-size: 11px;
+  color: #00ff00;
+  font-family: monospace;
+  line-height: 18px;
+  margin-bottom: 2px;
+}
+
+/* 控制按钮 */
+.controls {
+  flex-direction: column;
+  margin-bottom: 15px;
+}
+
+.btn {
+  height: 40px;
+  border-radius: 20px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.btn-primary {
+  background-color: #09ba07;
+}
+
+.btn-danger {
+  background-color: #ff5722;
+}
+
+.btn-secondary {
+  background-color: #333333;
+}
+
+.btn-text {
+  font-size: 16px;
+  color: #ffffff;
+  font-weight: bold;
+}
+</style>

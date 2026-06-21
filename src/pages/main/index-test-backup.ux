@@ -1,0 +1,37 @@
+<template>
+  <div class="page">
+    <text class="title">测试页面</text>
+    <text class="info">状态: {{appState}}</text>
+  </div>
+</template>
+
+<script>
+export default {
+  data: {
+    appState: 'idle'
+  },
+
+  onInit() {
+    console.log('Simple test page loaded')
+  }
+}
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  padding: 20px;
+  background-color: #000000;
+}
+
+.title {
+  font-size: 24px;
+  color: #ffffff;
+  margin-bottom: 20px;
+}
+
+.info {
+  font-size: 16px;
+  color: #ffffff;
+}
+</style>

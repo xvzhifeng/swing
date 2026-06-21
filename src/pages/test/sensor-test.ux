@@ -1,0 +1,135 @@
+<template>
+  <div class="test-page">
+    <div class="header">
+      <div class="back-btn" onclick="goBack">
+        <text class="back-text">← 返回</text>
+      </div>
+      <text class="title">传感器基础测试</text>
+    </div>
+
+    <text class="status">{{status}}</text>
+
+    <div class="btn" onclick="testSensor">
+      <text class="btn-text">测试传感器</text>
+    </div>
+
+    <text class="tip">查看控制台日志获取详细信息</text>
+  </div>
+</template>
+
+<script>
+import sensor from '@system.sensor'
+import router from '@system.router'
+
+export default {
+  data: {
+    status: '未测试'
+  },
+
+  onInit() {
+    console.log('页面初始化')
+    console.log('sensor 类型: ' + typeof sensor)
+    console.log('subscribeAccelerometer 类型: ' + typeof sensor.subscribeAccelerometer)
+  },
+
+  onDestroy() {
+    // 页面销毁时取消订阅
+    try {
+      sensor.unsubscribeAccelerometer()
+    } catch (e) {
+      console.log('unsubscribe error:', e)
+    }
+  },
+
+  goBack() {
+    router.back()
+  },
+
+  testSensor() {
+    console.log('===== 开始测试 =====')
+    this.status = '测试中...'
+
+    try {
+      sensor.subscribeAccelerometer({
+        interval: 'game',
+        callback: (ret) => {
+          console.log('✓ 收到数据: x=' + ret.x + ', y=' + ret.y + ', z=' + ret.z)
+          const x = (ret.x * 100) / 100
+          const y = (ret.y * 100) / 100
+          const z = (ret.z * 100) / 100
+          this.status = 'x=' + x.toFixed(2) + ', y=' + y.toFixed(2) + ', z=' + z.toFixed(2)
+        },
+        fail: (msg, code) => {
+          console.log('✗ 失败: code=' + code + ', msg=' + msg)
+          this.status = '传感器失败: ' + code
+        }
+      })
+
+      console.log('订阅已发送，等待回调...')
+
+    } catch (e) {
+      console.log('✗ 异常: ' + e.message)
+      this.status = '发生异常: ' + e.message
+    }
+  }
+}
+</script>
+
+<style>
+.test-page {
+  flex-direction: column;
+  padding: 15px;
+  background-color: #000000;
+}
+
+.header {
+  flex-direction: column;
+  margin-bottom: 15px;
+}
+
+.back-btn {
+  align-self: flex-start;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.back-text {
+  font-size: 14px;
+  color: #09ba07;
+}
+
+.title {
+  font-size: 16px;
+  color: #ffffff;
+  text-align: center;
+}
+
+.status {
+  font-size: 16px;
+  color: #09ba07;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.btn {
+  height: 45px;
+  background-color: #09ba07;
+  border-radius: 22px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.btn-text {
+  font-size: 16px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.tip {
+  font-size: 11px;
+  color: #999999;
+  text-align: center;
+  margin-top: 20px;
+}
+</style>

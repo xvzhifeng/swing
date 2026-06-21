@@ -1,0 +1,32 @@
+Phase 1 (MVP) Test Checklist
+=============================
+1
+## Task 15: Integration Test - Basic Flow
+[ ] Build succeeds with no errors
+[ ] Idle state displays correctly (title, mode selector, start button)
+[ ] Mode toggle works (standard ↔ professional)
+[ ] Start workout transitions to running state
+[ ] Swing detection works (shake watch → count increments)
+[ ] Duration timer increments correctly
+[ ] Pause/resume functions correctly
+[ ] End workout shows confirmation dialog
+[ ] Finished state displays correct stats
+[ ] Return to idle shows last session info
+
+## Task 16: Crash Recovery
+[ ] Start workout → force close → reopen → recovery dialog appears
+[ ] "继续" option restores session correctly
+[ ] "放弃" option saves session as finished
+
+## Task 17: Edge Cases
+[ ] Rapid swings - debounce prevents duplicates (200ms)
+[ ] Zero swings workout - handles gracefully
+[ ] Mode change blocked during workout
+[ ] 30+ sessions - oldest auto-removed
+
+## Task 18: Performance
+[ ] Long workout (30+ min) stable
+[ ] Background operation works
+[ ] Sensor power management correct (unsubscribe on hide)
+
+Tests to be executed manually on device/simulator.

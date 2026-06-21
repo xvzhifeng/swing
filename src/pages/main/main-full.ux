@@ -1,0 +1,1302 @@
+<template>
+  <div class="page">
+    <!-- Idle State -->
+    <div class="state-idle" if="{{appState === 'idle'}}">
+      <text class="title">羽毛球运动</text>
+
+      <!-- Last session info (if exists) -->
+      <div class="last-session" if="{{lastSession}}">
+        <text class="label">上次运动</text>
+        <text class="info">{{formatDate(lastSession.startTime)}}</text>
+        <text class="info">时长 {{formatTime(lastSession.duration)}} | 挥拍 {{lastSession.stats.totalSwings}}次</text>
+      </div>
+
+      <!-- Mode selector -->
+      <div class="mode-selector">
+        <text class="mode-label">模式：</text>
+        <div class="mode-toggle" onclick="toggleMode">
+          <text class="mode-text">{{getModeLabel()}}</text>
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <div class="btn-primary" onclick="startWorkout">
+        <text class="btn-text">开始运动</text>
+      </div>
+
+      <!-- Sensor unavailable warning -->
+      <text class="warning" if="{{!sensorAvailable}}">加速度计不可用</text>
+    </div>
+
+    <!-- Running State -->
+    <div class="state-running" if="{{appState === 'running' || appState === 'paused'}}">
+      <!-- Header -->
+      <div class="header">
+        <text class="status">{{getStatusLabel()}}</text>
+        <text class="duration">{{getFormattedDuration()}}</text>
+        <text class="mode-badge">{{getModeLabel()}}</text>
+      </div>
+
+      <!-- Data cards -->
+      <div class="cards-container">
+        <!-- Top row: Swings and Speed -->
+        <div class="card-row">
+          <div class="card-small">
+            <text class="card-label">挥拍次数</text>
+            <text class="card-value">{{session ? session.stats.totalSwings : 0}}</text>
+          </div>
+          <div class="card-small">
+            <text class="card-label">杀球次数</text>
+            <text class="card-value">0</text>
+            <text class="card-note">(阶段2)</text>
+          </div>
+        </div>
+
+        <!-- Center: Current speed (large card) -->
+        <div class="card-large">
+          <text class="card-label-center">当前速度</text>
+          <text class="card-value-large">{{session ? session.stats.currentSpeed : 0}}</text>
+          <text class="card-unit">km/h</text>
+          <text class="card-max">最快: {{session ? session.stats.maxSpeed : 0}} km/h</text>
+        </div>
+
+        <!-- Bottom row: Other stroke types -->
+        <div class="card-row">
+          <div class="card-small">
+            <text class="card-label">抽球次数</text>
+            <text class="card-value">0</text>
+            <text class="card-note">(阶段2)</text>
+          </div>
+          <div class="card-small">
+            <text class="card-label">挑球次数</text>
+            <text class="card-value">0</text>
+            <text class="card-note">(阶段2)</text>
+          </div>
+        </div>
+
+        <!-- Heart rate (reserved) -->
+        <text class="heart-rate">心率: -- bpm</text>
+      </div>
+
+      <!-- Control buttons -->
+      <div class="controls">
+        <div class="btn-secondary" if="{{appState === 'running'}}" onclick="pauseWorkout">
+          <text class="btn-text">暂停</text>
+        </div>
+        <div class="btn-secondary" if="{{appState === 'paused'}}" onclick="resumeWorkout">
+          <text class="btn-text">继续</text>
+        </div>
+        <div class="btn-danger" onclick="endWorkout">
+          <text class="btn-text">结束运动</text>
+        </div>
+      </div>
+
+      <!-- Auto-pause hint -->
+      <div class="auto-pause-hint" if="{{showAutoPauseHint}}">
+        <text class="hint-text">已自动暂停（2分钟无动作）</text>
+      </div>
+    </div>
+
+    <!-- Finished State -->
+    <div class="state-finished" if="{{appState === 'finished'}}">
+      <text class="title">运动完成</text>
+
+      <!-- Summary card -->
+      <div class="summary-card">
+        <div class="summary-row">
+          <text class="summary-label">运动时长</text>
+          <text class="summary-value">{{getFormattedDuration()}}</text>
+        </div>
+        <div class="summary-row">
+          <text class="summary-label">总挥拍</text>
+          <text class="summary-value">{{session ? session.stats.totalSwings : 0}}次</text>
+        </div>
+        <div class="summary-row">
+          <text class="summary-label">最快速度</text>
+          <text class="summary-value">{{session ? session.stats.maxSpeed : 0}} km/h</text>
+        </div>
+        <div class="summary-row">
+          <text class="summary-label">平均速度</text>
+          <text class="summary-value">{{session ? session.stats.avgSpeed : 0}} km/h</text>
+        </div>
+      </div>
+
+      <!-- Phase 2/3 placeholders -->
+      <text class="phase-note">击球分类统计和图表将在阶段2/3添加</text>
+
+      <!-- Action buttons -->
+      <div class="btn-primary" onclick="startNewWorkout">
+        <text class="btn-text">开始新运动</text>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import storage from '@system.storage'
+import sensor from '@system.sensor'
+import prompt from '@system.prompt'
+import vibrator from '@system.vibrator'
+import { STORAGE_KEY, STORAGE_KEY_TEMP, MAX_HISTORY, THRESHOLDS, DEBOUNCE_TIME, SPEED_COEFFICIENT } from '../../common/constants.js'
+import { calculateMagnitude, calculateSpeed, formatTime, formatDate } from '../../common/utils.js'
+
+/**
+ * Storage Manager - Handles session persistence
+ */
+class StorageManager {
+  /**
+   * Save session to history
+   * @param {Object} session - Session object to save
+   * @returns {Promise<Array>} Updated history array
+   */
+  static saveSession(session) {
+    return new Promise((resolve, reject) => {
+      this.loadHistory().then(history => {
+        // Add new session at the beginning
+        history.unshift(session)
+
+        // Keep only MAX_HISTORY sessions
+        if (history.length > MAX_HISTORY) {
+          history = history.slice(0, MAX_HISTORY)
+        }
+
+        // Save to storage
+        storage.set({
+          key: STORAGE_KEY,
+          value: JSON.stringify(history),
+          success: () => {
+            console.log('Session saved successfully')
+            resolve(history)
+          },
+          fail: (data, code) => {
+            console.error('Failed to save session:', code, data)
+            reject({ data, code })
+          }
+        })
+      }).catch(err => reject(err))
+    })
+  }
+
+  /**
+   * Load all sessions from history
+   * @returns {Promise<Array>} Array of session objects
+   */
+  static loadHistory() {
+    return new Promise((resolve) => {
+      storage.get({
+        key: STORAGE_KEY,
+        success: (data) => {
+          try {
+            const history = JSON.parse(data)
+            if (Array.isArray(history)) {
+              console.log(`Loaded ${history.length} sessions from history`)
+              resolve(history)
+            } else {
+              console.log('History data is not an array, returning empty')
+              resolve([])
+            }
+          } catch (e) {
+            console.error('Failed to parse history:', e)
+            resolve([])
+          }
+        },
+        fail: (data, code) => {
+          console.log('No history found or failed to load:', code)
+          resolve([])
+        }
+      })
+    })
+  }
+
+  /**
+   * Save temporary session (for crash recovery)
+   * @param {Object} session - Current session object
+   */
+  static saveTempSession(session) {
+    if (!session) return
+
+    storage.set({
+      key: STORAGE_KEY_TEMP,
+      value: JSON.stringify(session),
+      success: () => {
+        console.log('Temp session saved')
+      },
+      fail: (data, code) => {
+        console.error('Failed to save temp session:', code)
+      }
+    })
+  }
+
+  /**
+   * Load temporary session (for crash recovery)
+   * @returns {Promise<Object|null>} Session object or null
+   */
+  static loadTempSession() {
+    return new Promise((resolve) => {
+      storage.get({
+        key: STORAGE_KEY_TEMP,
+        success: (data) => {
+          try {
+            const session = JSON.parse(data)
+            console.log('Loaded temp session')
+            resolve(session)
+          } catch (e) {
+            console.error('Failed to parse temp session:', e)
+            resolve(null)
+          }
+        },
+        fail: () => {
+          console.log('No temp session found')
+          resolve(null)
+        }
+      })
+    })
+  }
+
+  /**
+   * Clear temporary session
+   */
+  static clearTempSession() {
+    storage.delete({
+      key: STORAGE_KEY_TEMP,
+      success: () => {
+        console.log('Temp session cleared')
+      },
+      fail: (data, code) => {
+        console.error('Failed to clear temp session:', code)
+      }
+    })
+  }
+}
+
+/**
+ * Session Manager - Handles workout state and timing
+ */
+class SessionManager {
+  constructor() {
+    this.session = null
+    this.intervalId = null
+    this.totalSpeed = 0  // Sum of all speeds for average calculation
+  }
+
+  /**
+   * Create new session
+   * @param {string} mode - 'standard' or 'professional'
+   * @returns {Object} New session object
+   */
+  createSession(mode = 'standard') {
+    const now = Date.now()
+    this.session = {
+      id: now.toString(),
+      mode: mode,
+      startTime: now,
+      endTime: null,
+      duration: 0,
+      totalTime: 0,
+      pausedTime: 0,
+      pauseStartTime: null,
+      stats: {
+        totalSwings: 0,
+        other: 0,  // Phase 1: all swings counted as 'other'
+        maxSpeed: 0,
+        avgSpeed: 0,
+        currentSpeed: 0,
+        heartRate: null  // Reserved for future
+      },
+      status: 'running',
+      lastSwingTime: now,
+      isPaused: false,
+      isActive: true
+    }
+    this.totalSpeed = 0
+    return this.session
+  }
+
+  /**
+   * Start session timer (updates totalTime every second)
+   * @param {Function} callback - Called every second with updated time
+   */
+  startTimer(callback) {
+    this.stopTimer() // Clear any existing timer
+    this.intervalId = setInterval(() => {
+      if (this.session && this.session.isActive && !this.session.isPaused) {
+        this.session.totalTime = Math.floor((Date.now() - this.session.startTime - this.session.pausedTime) / 1000)
+        this.session.duration = this.session.totalTime
+        if (callback) callback(this.session.totalTime)
+      }
+    }, 1000)
+  }
+
+  /**
+   * Stop session timer
+   */
+  stopTimer() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId)
+      this.intervalId = null
+    }
+  }
+
+  /**
+   * Pause session
+   */
+  pause() {
+    if (this.session && !this.session.isPaused) {
+      this.session.isPaused = true
+      this.session.pauseStartTime = Date.now()
+      console.log('Session paused at', this.session.pauseStartTime)
+    }
+  }
+
+  /**
+   * Resume session
+   */
+  resume() {
+    if (this.session && this.session.isPaused && this.session.pauseStartTime) {
+      const pauseDuration = Date.now() - this.session.pauseStartTime
+      this.session.pausedTime += pauseDuration
+      this.session.isPaused = false
+      this.session.pauseStartTime = null
+      console.log('Session resumed, paused for', pauseDuration, 'ms')
+    }
+  }
+
+  /**
+   * End session
+   * @returns {Object} Completed session object
+   */
+  end() {
+    if (!this.session) return null
+
+    this.stopTimer()
+    this.session.isActive = false
+    this.session.status = 'finished'
+    this.session.endTime = Date.now()
+
+    // Final time calculation
+    if (this.session.isPaused && this.session.pauseStartTime) {
+      const pauseDuration = Date.now() - this.session.pauseStartTime
+      this.session.pausedTime += pauseDuration
+    }
+
+    this.session.totalTime = Math.floor((this.session.endTime - this.session.startTime - this.session.pausedTime) / 1000)
+    this.session.duration = this.session.totalTime
+
+    // Calculate average speed
+    if (this.session.stats.totalSwings > 0) {
+      this.session.stats.avgSpeed = Math.round(
+        this.totalSpeed / this.session.stats.totalSwings
+      )
+    }
+
+    const completedSession = { ...this.session }
+    this.session = null
+
+    return completedSession
+  }
+
+  /**
+   * Record a swing
+   * @param {number} speed - Swing speed in km/h
+   */
+  recordSwing(speed) {
+    if (!this.session || !this.session.isActive || this.session.isPaused) {
+      return
+    }
+
+    const stats = this.session.stats
+
+    // Update counts
+    stats.totalSwings++
+    stats.other++  // Phase 1: all swings are 'other'
+
+    // Update speeds
+    stats.currentSpeed = speed
+    if (speed > stats.maxSpeed) {
+      stats.maxSpeed = speed
+    }
+    this.totalSpeed += speed
+
+    // Update last swing time
+    this.session.lastSwingTime = Date.now()
+
+    console.log(`Swing recorded: count=${stats.totalSwings}, speed=${speed}, max=${stats.maxSpeed}`)
+  }
+
+  /**
+   * Get current session
+   * @returns {Object|null} Current session or null
+   */
+  getSession() {
+    return this.session
+  }
+
+  /**
+   * Restore session from crash recovery
+   * @param {Object} sessionData - Saved session data
+   */
+  restoreSession(sessionData) {
+    this.session = { ...sessionData }
+    this.session.isActive = true
+
+    // Resume from paused state if needed
+    if (this.session.isPaused) {
+      this.session.pauseStartTime = Date.now()
+    }
+
+    console.log('Session restored:', this.session.id)
+  }
+}
+
+/**
+ * Sensor Manager - Handles accelerometer and swing detection
+ */
+class SensorManager {
+  constructor() {
+    this.isSubscribed = false
+    this.lastSwingTime = 0
+    this.swingCallback = null
+    this.currentThreshold = THRESHOLDS.standard.swingThreshold
+  }
+
+  /**
+   * Subscribe to accelerometer sensor
+   * @param {Function} callback - Called when swing detected (magnitude, speed)
+   * @param {string} mode - 'standard' or 'professional'
+   */
+  subscribe(callback, mode = 'standard') {
+    if (this.isSubscribed) {
+      console.warn('Already subscribed to sensor')
+      return
+    }
+
+    this.swingCallback = callback
+    this.currentThreshold = THRESHOLDS[mode].swingThreshold
+
+    sensor.subscribeAccelerometer({
+      interval: 'game', // High frequency for sports
+      success: (data) => {
+        this.handleSensorData(data)
+      },
+      fail: (data, code) => {
+        console.error('Failed to subscribe to accelerometer:', code, data)
+      }
+    })
+
+    this.isSubscribed = true
+    console.log(`Sensor subscribed in ${mode} mode, threshold: ${this.currentThreshold}`)
+  }
+
+  /**
+   * Unsubscribe from accelerometer sensor
+   */
+  unsubscribe() {
+    if (!this.isSubscribed) {
+      return
+    }
+
+    sensor.unsubscribeAccelerometer()
+    this.isSubscribed = false
+    this.swingCallback = null
+    console.log('Sensor unsubscribed')
+  }
+
+  /**
+   * Handle sensor data and detect swings
+   * @param {Object} data - Sensor data {x, y, z}
+   */
+  handleSensorData(data) {
+    const { x, y, z } = data
+    const magnitude = calculateMagnitude(x, y, z)
+
+    // Check if magnitude exceeds threshold
+    if (magnitude >= this.currentThreshold) {
+      const now = Date.now()
+
+      // Debounce: ignore if within DEBOUNCE_TIME of last swing
+      if (now - this.lastSwingTime < DEBOUNCE_TIME) {
+        return
+      }
+
+      this.lastSwingTime = now
+      const speed = calculateSpeed(magnitude, SPEED_COEFFICIENT)
+
+      console.log(`Swing detected! magnitude=${magnitude.toFixed(2)}g, speed=${speed}km/h`)
+
+      // Trigger callback
+      if (this.swingCallback) {
+        this.swingCallback(magnitude, speed)
+      }
+    }
+  }
+
+  /**
+   * Update threshold based on mode
+   * @param {string} mode - 'standard' or 'professional'
+   */
+  updateThreshold(mode) {
+    this.currentThreshold = THRESHOLDS[mode].swingThreshold
+    console.log(`Threshold updated to ${this.currentThreshold} for ${mode} mode`)
+  }
+
+  /**
+   * Check if sensor is active
+   * @returns {boolean}
+   */
+  isActive() {
+    return this.isSubscribed
+  }
+}
+
+export default {
+  // ========== DATA MODEL (Task 7) ==========
+  data: {
+    // App state machine
+    appState: 'idle',  // 'idle' | 'running' | 'paused' | 'finished'
+
+    // Mode selection
+    mode: 'standard',  // 'standard' | 'professional'
+
+    // Current session (reactive binding)
+    session: null,
+
+    // History (for 'idle' state display)
+    history: [],
+    lastSession: null,  // Most recent session for idle display
+
+    // UI flags
+    sensorAvailable: true,
+    showAutoPauseHint: false,
+
+    // Managers
+    sessionManager: null,
+    sensorManager: null,
+    tempSaveTimer: null
+  },
+
+  // ========== LIFECYCLE METHODS (Task 7) ==========
+  onInit() {
+    console.log('Main page initialized')
+
+    // Initialize managers
+    this.sessionManager = new SessionManager()
+    this.sensorManager = new SensorManager()
+
+    // Load history
+    this.loadHistory()
+
+    // Check for unfinished session (Task 10)
+    this.checkUnfinishedSession()
+  },
+
+  onShow() {
+    console.log('Main page shown')
+  },
+
+  onHide() {
+    console.log('Main page hidden')
+  },
+
+  onDestroy() {
+    console.log('Main page destroyed')
+
+    // Cleanup
+    if (this.sensorManager) {
+      this.sensorManager.unsubscribe()
+    }
+    if (this.sessionManager) {
+      this.sessionManager.stopTimer()
+    }
+    if (this.tempSaveTimer) {
+      clearInterval(this.tempSaveTimer)
+    }
+  },
+
+  // ========== HELPER METHODS (Task 7) ==========
+  /**
+   * Load session history from storage
+   */
+  loadHistory() {
+    StorageManager.loadHistory().then(history => {
+      this.history = history
+      if (history.length > 0) {
+        this.lastSession = history[0]
+        console.log('Last session:', this.lastSession.id)
+      }
+      this.$set('history', this.history)
+      this.$set('lastSession', this.lastSession)
+    }).catch(err => {
+      console.error('Failed to load history:', err)
+    })
+  },
+
+  /**
+   * Computed properties (helper methods)
+   */
+  getFormattedDuration() {
+    if (!this.session) return '00:00'
+    return formatTime(this.session.duration)
+  },
+
+  getModeLabel() {
+    return this.mode === 'standard' ? '标准' : '专业'
+  },
+
+  getStatusLabel() {
+    if (this.appState === 'running') return '运动中'
+    if (this.appState === 'paused') return '已暂停'
+    return ''
+  },
+
+  /**
+   * Format timestamp to readable date
+   */
+  formatDate(timestamp) {
+    return formatDate(timestamp)
+  },
+
+  /**
+   * Format duration in seconds
+   */
+  formatTime(seconds) {
+    return formatTime(seconds)
+  },
+
+  /**
+   * Update UI with current session data
+   */
+  updateUI() {
+    const session = this.sessionManager.getSession()
+    if (!session) return
+
+    this.session = { ...session }
+    this.$set('session', this.session)
+  },
+
+  /**
+   * Trigger vibration feedback
+   * @param {number} duration - Vibration duration in ms
+   */
+  vibrateDevice(duration = 30) {
+    vibrator.vibrate({
+      mode: 'short',
+      success: () => {
+        console.log('Vibration triggered')
+      },
+      fail: (data, code) => {
+        console.error('Vibration failed:', code)
+      }
+    })
+  },
+
+  // ========== START WORKOUT FLOW (Task 8) ==========
+  /**
+   * Start new workout session
+   */
+  startWorkout() {
+    console.log('Starting workout in', this.mode, 'mode')
+
+    // Create new session
+    this.session = this.sessionManager.createSession(this.mode)
+
+    // Start timer
+    this.sessionManager.startTimer((time) => {
+      if (this.session) {
+        this.session.totalTime = time
+        this.$set('session', { ...this.session })
+      }
+    })
+
+    // Subscribe to sensor
+    this.sensorManager.subscribe((magnitude, speed) => {
+      this.handleSwingDetected(magnitude, speed)
+    }, this.mode)
+
+    // Update UI state
+    this.appState = 'running'
+    this.$set('appState', this.appState)
+    this.$set('session', this.session)
+
+    // Start periodic temp save (every 5 seconds)
+    this.saveTempSessionPeriodically()
+
+    console.log('Workout started successfully')
+  },
+
+  /**
+   * Handle swing detected by sensor (Task 8)
+   * @param {number} magnitude - Acceleration magnitude (g)
+   * @param {number} speed - Calculated speed (km/h)
+   */
+  handleSwingDetected(magnitude, speed) {
+    console.log('Swing detected:', magnitude, speed)
+
+    // Record swing in session
+    this.sessionManager.recordSwing(speed)
+
+    // Update UI
+    this.updateUI()
+
+    // Vibration feedback
+    this.vibrateDevice()
+  },
+
+  /**
+   * Save temp session periodically for crash recovery (Task 8)
+   */
+  saveTempSessionPeriodically() {
+    // Clear existing timer
+    if (this.tempSaveTimer) {
+      clearInterval(this.tempSaveTimer)
+    }
+
+    // Save every 5 seconds
+    this.tempSaveTimer = setInterval(() => {
+      const session = this.sessionManager.getSession()
+      if (session && session.isActive) {
+        StorageManager.saveTempSession(session)
+      }
+    }, 5000)
+  },
+
+  /**
+   * Toggle between standard and professional mode (Task 8)
+   */
+  toggleMode() {
+    if (this.appState !== 'idle') {
+      console.warn('Cannot change mode during workout')
+      return
+    }
+
+    this.mode = this.mode === 'standard' ? 'professional' : 'standard'
+    this.$set('mode', this.mode)
+
+    console.log('Mode toggled to:', this.mode)
+  },
+
+  // ========== PAUSE/RESUME/END WORKFLOW (Task 9) ==========
+  /**
+   * Pause current workout
+   */
+  pauseWorkout() {
+    if (!this.sessionManager) return
+
+    console.log('Pausing workout')
+
+    // Pause session
+    this.sessionManager.pause()
+
+    // Update UI
+    this.appState = 'paused'
+    this.$set('appState', this.appState)
+
+    console.log('Workout paused')
+  },
+
+  /**
+   * Resume paused workout
+   */
+  resumeWorkout() {
+    if (!this.sessionManager) return
+
+    console.log('Resuming workout')
+
+    // Resume session
+    this.sessionManager.resume()
+
+    // Update UI
+    this.appState = 'running'
+    this.$set('appState', this.appState)
+
+    console.log('Workout resumed')
+  },
+
+  /**
+   * End workout (show confirmation)
+   */
+  endWorkout() {
+    if (!this.isWorkoutActive) {
+      return
+    }
+
+    console.log('Ending workout - showing confirmation')
+
+    // Show confirmation dialog
+    prompt.showDialog({
+      title: '结束训练',
+      message: '确定要结束当前训练吗？',
+      buttons: [
+        {
+          text: '取消',
+          color: '#999999'
+        },
+        {
+          text: '结束',
+          color: '#09ba07'
+        }
+      ],
+      success: (data) => {
+        console.log('Dialog result:', data)
+        if (data.index === 1) {
+          // User confirmed
+          this.confirmEndWorkout()
+        }
+      },
+      cancel: () => {
+        console.log('Dialog cancelled')
+      },
+      fail: (data, code) => {
+        console.error('Dialog failed:', code, data)
+      }
+    })
+  },
+
+  /**
+   * Confirm and complete workout end (Task 9)
+   */
+  confirmEndWorkout() {
+    console.log('Confirming workout end')
+
+    // Stop sensor
+    this.sensorManager.unsubscribe()
+
+    // End session
+    const completedSession = this.sessionManager.end()
+
+    // Stop temp save timer
+    if (this.tempSaveTimer) {
+      clearInterval(this.tempSaveTimer)
+      this.tempSaveTimer = null
+    }
+
+    // Save to history
+    if (completedSession) {
+      this.session = completedSession
+
+      StorageManager.saveSession(completedSession).then((history) => {
+        console.log('Session saved to history:', completedSession.id)
+
+        // Update history
+        this.history = history
+        this.lastSession = completedSession
+        this.$set('history', this.history)
+        this.$set('lastSession', this.lastSession)
+
+        // Clear temp session
+        StorageManager.clearTempSession()
+
+        // Update UI state
+        this.appState = 'finished'
+        this.$set('appState', this.appState)
+        this.$set('session', this.session)
+      }).catch((err) => {
+        console.error('Failed to save session:', err)
+        // Still show finished state even if save fails
+        this.appState = 'finished'
+        this.$set('appState', this.appState)
+        this.$set('session', this.session)
+      })
+    } else {
+      console.error('No session to save')
+      this.startNewWorkout()
+    }
+  },
+
+  /**
+   * Reset UI for new workout (Task 9)
+   */
+  startNewWorkout() {
+    console.log('Resetting UI for new workout')
+
+    this.appState = 'idle'
+    this.session = null
+
+    this.$set('appState', this.appState)
+    this.$set('session', this.session)
+
+    console.log('Ready for new workout')
+  },
+
+  // ========== CRASH RECOVERY (Task 10) ==========
+  /**
+   * Check for unfinished session on startup
+   */
+  checkUnfinishedSession() {
+    console.log('Checking for unfinished session')
+
+    StorageManager.loadTempSession().then((tempSession) => {
+      if (tempSession && tempSession.isActive) {
+        console.log('Unfinished session found:', tempSession.id)
+
+        // Show recovery dialog
+        prompt.showDialog({
+          title: '恢复训练',
+          message: '检测到未完成的训练，是否继续？',
+          buttons: [
+            {
+              text: '放弃',
+              color: '#999999'
+            },
+            {
+              text: '继续',
+              color: '#09ba07'
+            }
+          ],
+          success: (data) => {
+            if (data.index === 1) {
+              // User chose to recover
+              this.recoverSession(tempSession)
+            } else {
+              // User chose to discard
+              StorageManager.clearTempSession()
+              console.log('User discarded unfinished session')
+            }
+          },
+          cancel: () => {
+            // Dialog cancelled, discard session
+            StorageManager.clearTempSession()
+            console.log('Recovery cancelled, session discarded')
+          },
+          fail: (data, code) => {
+            console.error('Recovery dialog failed:', code)
+            StorageManager.clearTempSession()
+          }
+        })
+      } else {
+        console.log('No unfinished session found')
+      }
+    }).catch((err) => {
+      console.error('Failed to check for unfinished session:', err)
+    })
+  },
+
+  /**
+   * Recover session from crash (Task 10)
+   * @param {Object} tempSession - Saved session data
+   */
+  recoverSession(tempSession) {
+    console.log('Recovering session:', tempSession.id)
+
+    // Restore session in manager
+    this.sessionManager.restoreSession(tempSession)
+
+    // Restore UI state
+    this.mode = tempSession.mode
+    this.session = tempSession
+    this.appState = tempSession.isPaused ? 'paused' : 'running'
+
+    // Update all UI bindings
+    this.$set('mode', this.mode)
+    this.$set('session', this.session)
+    this.$set('appState', this.appState)
+
+    // Restart timer
+    this.sessionManager.startTimer((time) => {
+      if (this.session) {
+        this.session.totalTime = time
+        this.$set('session', { ...this.session })
+      }
+    })
+
+    // Subscribe to sensor
+    this.sensorManager.subscribe((magnitude, speed) => {
+      this.handleSwingDetected(magnitude, speed)
+    }, this.mode)
+
+    // Restart temp save
+    this.saveTempSessionPeriodically()
+
+    console.log('Session recovered successfully')
+  }
+}
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  padding: 20px;
+  background-color: #000000;
+  width: 100%;
+  height: 100%;
+}
+
+/* Common */
+.title {
+  font-size: 24px;
+  font-weight: bold;
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* Idle State */
+.state-idle {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.last-session {
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 30px;
+  padding: 15px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  width: 280px;
+}
+
+.label {
+  font-size: 12px;
+  color: #999999;
+  margin-bottom: 8px;
+}
+
+.info {
+  font-size: 14px;
+  color: #cccccc;
+  margin-bottom: 4px;
+}
+
+.mode-selector {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.mode-label {
+  font-size: 14px;
+  color: #cccccc;
+  margin-right: 10px;
+}
+
+.mode-toggle {
+  padding: 8px 20px;
+  background-color: #333333;
+  border-radius: 20px;
+  border: 1px solid #666666;
+}
+
+.mode-text {
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.btn-primary {
+  width: 200px;
+  height: 50px;
+  background-color: #09ba07;
+  border-radius: 25px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
+.btn-text {
+  font-size: 18px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.warning {
+  font-size: 12px;
+  color: #ff5722;
+  margin-top: 10px;
+}
+
+/* Running State */
+.state-running {
+  flex-direction: column;
+  width: 100%;
+}
+
+.header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px 15px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+}
+
+.status {
+  font-size: 14px;
+  color: #09ba07;
+  font-weight: bold;
+}
+
+.duration {
+  font-size: 18px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.mode-badge {
+  font-size: 12px;
+  color: #999999;
+}
+
+.cards-container {
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+
+.card-row {
+  flex-direction: row;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.card-small {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 80px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.card-label {
+  font-size: 11px;
+  color: #999999;
+  margin-bottom: 8px;
+}
+
+.card-value {
+  font-size: 28px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.card-note {
+  font-size: 9px;
+  color: #666666;
+  margin-top: 4px;
+}
+
+.card-large {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 140px;
+  background-color: #0d3d0c;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 10px;
+}
+
+.card-label-center {
+  font-size: 12px;
+  color: #66bb6a;
+  margin-bottom: 8px;
+}
+
+.card-value-large {
+  font-size: 48px;
+  color: #09ba07;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.card-unit {
+  font-size: 14px;
+  color: #66bb6a;
+  margin-bottom: 8px;
+}
+
+.card-max {
+  font-size: 11px;
+  color: #999999;
+}
+
+.heart-rate {
+  font-size: 12px;
+  color: #999999;
+  text-align: center;
+  margin-top: 10px;
+}
+
+.controls {
+  flex-direction: row;
+  justify-content: space-around;
+  margin-top: 20px;
+}
+
+.btn-secondary {
+  width: 130px;
+  height: 45px;
+  background-color: #333333;
+  border-radius: 22px;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-danger {
+  width: 130px;
+  height: 45px;
+  background-color: #ff5722;
+  border-radius: 22px;
+  align-items: center;
+  justify-content: center;
+}
+
+.auto-pause-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px 30px;
+  background-color: rgba(0, 0, 0, 0.9);
+  border-radius: 12px;
+  border: 1px solid #09ba07;
+}
+
+.hint-text {
+  font-size: 14px;
+  color: #09ba07;
+  text-align: center;
+}
+
+/* Finished State */
+.state-finished {
+  flex-direction: column;
+  align-items: center;
+}
+
+.summary-card {
+  flex-direction: column;
+  width: 280px;
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.summary-row {
+  flex-direction: row;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #999999;
+}
+
+.summary-value {
+  font-size: 16px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.phase-note {
+  font-size: 11px;
+  color: #666666;
+  text-align: center;
+  margin-bottom: 30px;
+}
+</style>

@@ -1,0 +1,44 @@
+{
+  "package": "com.application.watch.badminton",
+  "name": "swing",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "minPlatformVersion": 1000,
+  "icon": "/common/logo.png",
+  "deviceTypeList": [
+    "watch"
+  ],
+  "features": [
+    {
+      "name": "system.router"
+    },
+    {
+      "name": "system.sensor"
+    },
+    {
+      "name": "system.storage"
+    },
+    {
+      "name": "system.vibrator"
+    },
+    {
+      "name": "system.prompt"
+    },
+    { "name": "system.brightness" }
+  ],
+  "config": {
+    "logLevel": "log",
+    "designWidth": "device-width"
+  },
+  "router": {
+    "entry": "pages/main",
+    "pages": {
+      "pages/main": {
+        "component": "index"
+      },
+      "pages/debug": {
+        "component": "debug-sensor"
+      }
+    }
+  }
+}

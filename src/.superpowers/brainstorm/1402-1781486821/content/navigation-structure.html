@@ -1,0 +1,102 @@
+<h2>应用页面结构方案</h2>
+<p class="subtitle">选择你认为最合理的页面组织方式</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>三页式（首页 + 运动 + 历史）</h3>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 15px;">
+          <div style="text-align: center; margin-bottom: 15px; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <div style="font-size: 12px; color: #888; margin-bottom: 8px;">📱 首页</div>
+            <div style="font-size: 11px; color: #666;">羽毛球运动</div>
+            <div style="margin-top: 12px;">
+              <div style="display: inline-block; background: #09ba07; color: white; padding: 8px 20px; border-radius: 20px; font-size: 11px;">开始运动</div>
+            </div>
+            <div style="margin-top: 8px;">
+              <div style="display: inline-block; background: #f0f0f0; color: #666; padding: 6px 15px; border-radius: 15px; font-size: 10px;">查看历史</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; font-size: 10px;">
+            <div style="flex: 1; padding: 10px; background: #e8f5e9; border-radius: 6px; text-align: center;">
+              <div style="font-weight: bold; margin-bottom: 4px;">运动页</div>
+              <div style="color: #666;">实时数据<br/>控制按钮</div>
+            </div>
+            <div style="flex: 1; padding: 10px; background: #fff3e0; border-radius: 6px; text-align: center;">
+              <div style="font-weight: bold; margin-bottom: 4px;">历史页</div>
+              <div style="color: #666;">统计图表<br/>记录列表</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>优点</h4><ul><li>结构清晰，入口明确</li><li>每页职责单一</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>需要多次点击跳转</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>双页式（运动 + 统计）</h3>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 15px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+            <div style="flex: 1; padding: 15px; background: #e8f5e9; border-radius: 8px; border: 2px solid #09ba07;">
+              <div style="font-size: 11px; font-weight: bold; margin-bottom: 8px;">🏸 运动模式</div>
+              <div style="font-size: 9px; color: #666; line-height: 1.4;">
+                • 实时数据显示<br/>
+                • 开始/暂停/结束按钮<br/>
+                • 进入即可开始
+              </div>
+            </div>
+            <div style="flex: 1; padding: 15px; background: #fff3e0; border-radius: 8px;">
+              <div style="font-size: 11px; font-weight: bold; margin-bottom: 8px;">📊 统计分析</div>
+              <div style="font-size: 9px; color: #666; line-height: 1.4;">
+                • 本次运动总结<br/>
+                • 历史记录<br/>
+                • 图表对比
+              </div>
+            </div>
+          </div>
+          <div style="text-align: center; font-size: 10px; color: #999; padding: 8px; background: #f5f5f5; border-radius: 6px;">
+            左右滑动或按钮切换页面
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>优点</h4><ul><li>快速切换运动/查看数据</li><li>符合手表应用习惯</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>统计页可能内容较多</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>单页流式（运动中 → 运动结束 → 历史）</h3>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 15px;">
+          <div style="margin-bottom: 8px; padding: 12px; background: #e8f5e9; border-radius: 8px; border-left: 3px solid #09ba07;">
+            <div style="font-size: 10px; font-weight: bold; margin-bottom: 4px;">状态1: 运动中</div>
+            <div style="font-size: 9px; color: #666;">显示实时数据 + 控制按钮</div>
+          </div>
+          <div style="margin-bottom: 8px; padding: 12px; background: #fff3e0; border-radius: 8px; border-left: 3px solid #ff9800;">
+            <div style="font-size: 10px; font-weight: bold; margin-bottom: 4px;">状态2: 运动结束</div>
+            <div style="font-size: 9px; color: #666;">自动展示本次统计 + "查看历史"按钮</div>
+          </div>
+          <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; border-left: 3px solid #999;">
+            <div style="font-size: 10px; font-weight: bold; margin-bottom: 4px;">状态3: 历史记录</div>
+            <div style="font-size: 9px; color: #666;">列表 + 图表 + "开始新运动"按钮</div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>优点</h4><ul><li>符合使用流程</li><li>减少导航层级</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>运动中无法快速查看历史</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

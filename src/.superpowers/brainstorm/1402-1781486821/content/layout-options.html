@@ -1,0 +1,114 @@
+<h2>运动实时界面布局方案</h2>
+<p class="subtitle">选择你认为最适合运动中查看的布局</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>聚焦单一数据</h3>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="text-align: center; padding: 30px 20px;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 8px;">当前杀球速度</div>
+          <div style="font-size: 48px; font-weight: bold; color: #09ba07; margin: 10px 0;">128</div>
+          <div style="font-size: 14px; color: #666; margin-bottom: 20px;">km/h</div>
+          <div style="display: flex; justify-content: space-around; font-size: 11px; color: #666; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+            <div>
+              <div style="font-weight: bold; color: #333;">23</div>
+              <div>挥拍</div>
+            </div>
+            <div>
+              <div style="font-weight: bold; color: #333;">8</div>
+              <div>杀球</div>
+            </div>
+            <div>
+              <div style="font-weight: bold; color: #333;">--</div>
+              <div>心率</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>优点</h4><ul><li>核心数据超大显示，运动中易读</li><li>一目了然</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>其他数据较小</li><li>需要滑动切换查看</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>平衡卡片式</h3>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 20px 15px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 11px; color: #888; margin-bottom: 4px;">挥拍次数</div>
+              <div style="font-size: 24px; font-weight: bold; color: #333;">23</div>
+            </div>
+            <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 11px; color: #888; margin-bottom: 4px;">杀球次数</div>
+              <div style="font-size: 24px; font-weight: bold; color: #333;">8</div>
+            </div>
+          </div>
+          <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 11px; color: #666; margin-bottom: 4px;">当前速度</div>
+            <div style="font-size: 32px; font-weight: bold; color: #09ba07;">128 <span style="font-size: 14px;">km/h</span></div>
+            <div style="font-size: 10px; color: #666; margin-top: 4px;">最快: 145 km/h</div>
+          </div>
+          <div style="margin-top: 10px; text-align: center; font-size: 11px; color: #999;">
+            心率: -- bpm
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>优点</h4><ul><li>所有数据同屏显示</li><li>信息层级清晰</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>单个数据字号较小</li><li>内容较密集</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>列表式紧凑</h3>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 20px 15px;">
+          <div style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; color: #666;">当前速度</span>
+              <span style="font-size: 28px; font-weight: bold; color: #09ba07;">128 <span style="font-size: 12px; color: #666;">km/h</span></span>
+            </div>
+          </div>
+          <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f5f5f5;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; color: #666;">最快速度</span>
+              <span style="font-size: 18px; font-weight: bold; color: #333;">145 <span style="font-size: 11px; color: #999;">km/h</span></span>
+            </div>
+          </div>
+          <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f5f5f5;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; color: #666;">挥拍次数</span>
+              <span style="font-size: 18px; font-weight: bold; color: #333;">23</span>
+            </div>
+          </div>
+          <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f5f5f5;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; color: #666;">杀球次数</span>
+              <span style="font-size: 18px; font-weight: bold; color: #333;">8</span>
+            </div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; color: #666;">心率</span>
+              <span style="font-size: 18px; font-weight: bold; color: #999;">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>优点</h4><ul><li>数据齐全，便于对比</li><li>扫视即可看全</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>重点不突出</li><li>运动中可能难以快速定位关键数据</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
